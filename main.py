@@ -3,10 +3,11 @@ import uvicorn
 from supabase import create_client, Client
 from pydantic import BaseModel
 
+
 app = FastAPI()
 
-supabase_url: str = "YOUR_SUPABASE_URL"
-supabase_key: str = "YOUR_SUPABASE_KEY"
+supabase_url: str = "https://xjdffwugkqyaqikgtmja.supabase.co"
+supabase_key: str = "sb_publishable_byAW58j2N12LVLQ4CEdzZw_ZBR9m-yw"
 
 # Supabase client initialization
 db = create_client(supabase_url, supabase_key)
