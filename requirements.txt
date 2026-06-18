@@ -1,6 +1,7 @@
-fastapi==0.83.2
-uvicorn==0.17.6
-requests==2.25.1
-beautifulsoup4==4.12.2
-supabase==0.44.1
-pydantic==1.10.9
+fastapi
+uvicorn
+requests
+beautifulsoup4
+supabase
+pydantic
+python-dotenv
