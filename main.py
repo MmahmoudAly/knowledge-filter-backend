@@ -13,10 +13,10 @@ load_dotenv()
 
 app = FastAPI(title="Knowledge Filter API - Secure Version")
 
-# 2. تفعيل الـ CORS لتسمح لواجهة Vercel بالاتصال بالـ API بأمان
+# 2. تفعيل الـ CORS لتسمح لواجهة Hugging Face بالاتصال بالـ API بأمان
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # في الإنتاج الفعلي، ضع رابط موقعك على Vercel هنا بدلاً من "*"
+    allow_origins=["https://huggingface.co/spaces/mmahmoudaly/knowledge-filter-backend"],  # في الإنتاج الفعلي، ضع رابط موقعك على Hugging Face هنا بدلاً من "*"
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
