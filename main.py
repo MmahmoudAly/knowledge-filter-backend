@@ -8,37 +8,36 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# 1. تحميل متغيرات البيئة من ملف .env المحلي (تلقائياً في البيئة المحلية)
 load_dotenv()
 
-app = FastAPI(title="Knowledge Filter API - Secure Version")
+app = FastAPI(title="Knowledge Filter API - Production V2")
 
-# 2. تفعيل الـ CORS لتسمح لواجهة Hugging Face بالاتصال بالـ API بأمان
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://mmahmoudaly-knowledge-filter-backend.hf.space"],  # في الإنتاج الفعلي، ضع رابط موقعك على Hugging Face هنا بدلاً من "*"
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 3. جلب بيانات الاتصال بـ Supabase بأمان من البيئة (Environment Variables)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# التحقق من وجود المفاتيح حتى لا يتعطل السيرفر بدون سبب واضح
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("خطأ: مفاتيح اتصال Supabase غير موجودة في متغيرات البيئة!")
+    raise RuntimeError("خطأ حرج: مفاتيح اتصال Supabase غير موجودة!")
 
-# تهيئة عميل Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 4. نموذج البيانات المستقبلة من الواجهة
 class LinkInput(BaseModel):
     url: str
     user_id: str = "1"
 
-# 5. دالة الكشط وحساب وقت القراءة تلقائياً
+# نموذج استلام بيانات السياق الحالي للمؤشر
+class RecommendationInput(BaseModel):
+    user_id: str = "1"
+    available_time: int
+    environment: str
+
 def analyze_url(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -50,7 +49,6 @@ def analyze_url(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         title = soup.title.string.strip() if soup.title else "مقالة غير معنونة"
 
-        # تنظيف الـ HTML من العناصر غير النصية
         for junk in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']):
             junk.extract()
 
@@ -58,17 +56,13 @@ def analyze_url(url):
         words = re.findall(r'\b\w+\b', clean_text)
         word_count = len(words)
 
-        # حساب الوقت (عدد الكلمات / 200 كلمة بالدقيقة)
         read_time = round(word_count / 200)
-
-        # تحديد النوع تلقائياً
         content_type = "video" if "youtube.com" in url or "youtu.be" in url else "article"
 
         return title, max(1, read_time), content_type
     except Exception:
-        return "رابط خارجي أو محمي", 5, "article"
+        return "رابط محمي أو خارجي", 5, "article"
 
-# 6. الـ Endpoint الرئيسي لحفظ الروابط
 @app.post("/add-link")
 async def add_link(item: LinkInput):
     title, read_time, content_type = analyze_url(item.url)
@@ -83,8 +77,37 @@ async def add_link(item: LinkInput):
     }
 
     try:
-        # إدخال البيانات في جدول links بـ Supabase
         supabase.table("links").insert(link_data).execute()
         return {"status": "success", "data": link_data}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"فشل الحفظ في قاعدة البيانات: {str(e)}")
+        error_str = str(e)
+        # التقاط قيد تكرار البيانات الصادر من قاعدة البيانات لمنع الكراش
+        if "unique_user_url" in error_str or "42501" in error_str or "23505" in error_str:
+            return {"status": "duplicate", "message": "هذا الرابط موجود في مصفاتك بالفعل!"}
+
+        raise HTTPException(status_code=500, detail=f"فشل الحفظ في قاعدة البيانات: {error_str}")
+
+@app.post("/get-recommendations")
+async def get_recommendations(criteria: RecommendationInput):
+    try:
+        # جلب الروابط غير المقروءة الخاصة بالمستخدم من Supabase
+        response = supabase.table("links")\
+            .select("*")\
+            .eq("user_id", criteria.user_id)\
+            .eq("status", "unread")\
+            .execute()
+
+        all_links = response.data
+        filtered_links = []
+
+        for link in all_links:
+            # القيد الأول: الوقت المقدر للقراءة يجب أن يكون أقل من أو يساوي الوقت المتاح
+            if link["estimated_read_time"] <= criteria.available_time:
+                # القيد الثاني: بيئة صاخبة بدون سماعات تمنع الفيديوهات
+                if criteria.environment == "noisy_no_headphones" and link["content_type"] == "video":
+                    continue
+                filtered_links.append(link)
+
+        return {"status": "success", "data": filtered_links}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"فشل جلب الاقتراحات: {str(e)}")
