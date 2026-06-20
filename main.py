@@ -44,24 +44,25 @@ def analyze_url(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-        # 1. التحقق أولاً إذا كان الرابط يخص منصة Youtube
-        if "youtube.com" in url or "youtu.be" in url:
+        # تحويل الرابط بالكامل إلى حروف صغيرة لمنع حساسية الحروف الكبيرة مثل YouTube
+        url_lower = url.lower()
+
+        # 1. التحقق المطور لمنصة يوتيوب
+        if "youtube.com" in url_lower or "youtu.be" in url_lower:
             try:
-                # استخدام رابط oEmbed الرسمي من يوتيوب لجلب معلومات الفيديو بأمان وبدون حظر
+                # نرسل الرابط الأصلي لـ oEmbed مع الحفاظ على معايير الحماية
                 oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
                 response = requests.get(oembed_url, headers=headers, timeout=5)
 
                 if response.status_code == 200:
                     video_data = response.json()
                     title = video_data.get("title", "فيديو يوتيوب")
-
-                    # بما أن وقت الفيديو لا يأتي عبر oEmbed، سنضع بالمتوسط 12 دقيقة لفيديوهات يوتيوب التعليمية
-                    # (يمكن للمستخدم لاحقاً تعديلها، أو نطورها في المستقبل)
+                    # إرجاع الوقت المقدر (12 دقيقة كمتوسط للوجبات التعليمية) والنوع الصحيح
                     return title, 12, "video"
             except Exception:
-                pass # إذا فشل طلب oEmbed لأي سبب، ينتقل للحل الاحتياطي بالأسفل
+                pass # في حال حدوث أي خطأ عابر، ينتقل للحل الاحتياطي بالأسفل
 
-        # 2. الكشط الطبيعي للمقالات العادية (كما هو)
+        # 2. الكشط الطبيعي للمقالات العادية
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200:
             return "رابط خارجي (تعذر الكشط)", 5, "article"
@@ -77,7 +78,9 @@ def analyze_url(url):
         word_count = len(words)
 
         read_time = round(word_count / 200)
-        content_type = "video" if "youtube.com" in url or "youtu.be" in url else "article"
+
+        # التحقق النهائي للنوع
+        content_type = "video" if "youtube.com" in url_lower or "youtu.be" in url_lower else "article"
 
         return title, max(1, read_time), content_type
 
